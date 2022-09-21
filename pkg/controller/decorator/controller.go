@@ -73,6 +73,7 @@ type decoratorController struct {
 
 	stopCh, doneCh chan struct{}
 	queue          workqueue.RateLimitingInterface
+	QueueKeys      []string
 
 	updateStrategy updateStrategyMap
 
@@ -295,6 +296,16 @@ func (c *decoratorController) worker() {
 	}
 }
 
+func (c *decoratorController) Dooo() bool {
+	for _, key := range c.QueueKeys {
+		if err := c.sync(key); err != nil {
+			utilruntime.HandleError(fmt.Errorf("failed to sync %v '%v': %w", c.dc.Name, key, err))
+		}
+	}
+
+	return true
+}
+
 func (c *decoratorController) processNextWorkItem() bool {
 	key, quit := c.queue.Get()
 	if quit {
@@ -327,6 +338,7 @@ func (c *decoratorController) enqueueParentObject(obj interface{}) {
 		return
 	}
 	c.queue.Add(key)
+	c.QueueKeys = common.Unique(append(c.QueueKeys, key))
 }
 
 func (c *decoratorController) enqueueParentObjectAfter(obj interface{}, delay time.Duration) {

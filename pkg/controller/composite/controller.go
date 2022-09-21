@@ -72,6 +72,7 @@ type parentController struct {
 
 	stopCh, doneCh chan struct{}
 	queue          workqueue.RateLimitingInterface
+	QueueKeys      []string
 
 	updateStrategy updateStrategyMap
 	childInformers common.InformerMap
@@ -286,6 +287,16 @@ func (pc *parentController) worker() {
 	}
 }
 
+func (pc *parentController) Dooo() bool {
+	for _, key := range pc.QueueKeys {
+		if err := pc.sync(key); err != nil {
+			utilruntime.HandleError(fmt.Errorf("failed to sync %v: %w", pc.parentResource.Kind, err))
+		}
+	}
+
+	return true
+}
+
 func (pc *parentController) processNextWorkItem() bool {
 	key, quit := pc.queue.Get()
 	if quit {
@@ -310,6 +321,7 @@ func (pc *parentController) enqueueParentObject(obj interface{}) {
 		return
 	}
 	pc.queue.Add(key)
+	pc.QueueKeys = common.Unique(append(pc.QueueKeys, key))
 }
 
 func (pc *parentController) enqueueParentObjectAfter(obj interface{}, delay time.Duration) {

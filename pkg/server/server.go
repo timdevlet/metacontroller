@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"metacontroller/pkg/logging"
+	"net/http"
 	"time"
 
 	"k8s.io/client-go/discovery"
@@ -123,7 +124,41 @@ func New(configuration options.Configuration) (controllerruntime.Manager, error)
 	// to make sure all the needed informers are already created
 	controllerContext.Start()
 
+	//
+	httpRouter := HttpRouter{compositeReconciler, decoratorReconciler}
+	go func(httpRouter *HttpRouter) {
+		port := ":" + configuration.TriggerSyncPort
+		logging.Logger.Info("Api server starting.", "port", port)
+		http.HandleFunc("/trigger_sync", httpRouter.triggerSync)
+		err := http.ListenAndServe(port, nil)
+		if err != nil {
+			logging.Logger.Error(err, "Cannot start Api server")
+		}
+	}(&httpRouter)
+
 	return mgr, nil
+}
+
+type HttpRouter struct {
+	compositeReconciler *composite.Metacontroller
+	decoratorReconciler *decorator.Metacontroller
+}
+
+func (r *HttpRouter) triggerSync(w http.ResponseWriter, req *http.Request) {
+	logging.Logger.Info("New /trigger_sync request")
+	for key, pController := range r.compositeReconciler.ParentControllers {
+
+		fmt.Println("Key:", key)
+		pController.Dooo()
+	}
+
+	for key, dController := range r.decoratorReconciler.DecoratorControllers {
+		fmt.Println("Key 2:", key)
+		dController.Dooo()
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	fmt.Fprintf(w, "{\"status\" : \"ok\"}")
 }
 
 func k8sCommunicationCheck(client *discovery.DiscoveryClient) (err error) {
