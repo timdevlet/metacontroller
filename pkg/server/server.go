@@ -22,6 +22,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"metacontroller/pkg/logging"
 	"net/http"
+	"sync"
 	"time"
 
 	"k8s.io/client-go/discovery"
@@ -125,24 +126,69 @@ func New(configuration options.Configuration) (controllerruntime.Manager, error)
 	// to make sure all the needed informers are already created
 	controllerContext.Start()
 
-	go func() {
-		startGin()
-	}()
+	// Trigger http server
+	if true {
+		httpRouter := HttpRouter{compositeReconciler, decoratorReconciler, sync.Mutex{}, false}
+
+		go func(httpRouter *HttpRouter) {
+			port := ":8090"
+			logging.Logger.Info("Api server starting.", "port", port)
+
+			r := gin.Default()
+			r.GET("/trigger_sync", httpRouter.triggerSync)
+
+			if err := r.Run(port); err != nil {
+				logging.Logger.Error(err, "Cannot start gin server")
+			}
+		}(&httpRouter)
+
+		go func() {
+			for {
+				if httpRouter.shouldSync {
+					httpRouter.setShouldSync(false)
+					httpRouter.sync()
+				}
+				time.Sleep(1 * time.Second)
+			}
+		}()
+	}
 
 	return mgr, nil
 }
 
-func startGin() {
-	r := gin.Default()
-	r.GET("/ping", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{
-			"message": "pong",
-		})
-	})
-	err := r.Run()
-	if err != nil {
-		return
+type HttpRouter struct {
+	compositeReconciler *composite.Metacontroller
+	decoratorReconciler *decorator.Metacontroller
+
+	stateMutex sync.Mutex
+	shouldSync bool
+}
+
+func (r *HttpRouter) sync() {
+	logging.Logger.Info("Sync start")
+	for _, pController := range r.compositeReconciler.ParentControllers {
+		pController.Start()
 	}
+
+	for _, dController := range r.decoratorReconciler.DecoratorControllers {
+		dController.Start()
+	}
+	logging.Logger.Info("Sync finish")
+}
+
+func (r *HttpRouter) setShouldSync(v bool) {
+	r.stateMutex.Lock()
+	defer r.stateMutex.Unlock()
+	r.shouldSync = v
+}
+
+func (r *HttpRouter) triggerSync(c *gin.Context) {
+	logging.Logger.Info("New /trigger_sync request")
+	r.setShouldSync(true)
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+	})
 }
 
 func k8sCommunicationCheck(client *discovery.DiscoveryClient) (err error) {
