@@ -32,6 +32,7 @@ unit-test: test-setup
 
 .PHONY: integration-test
 integration-test: test-setup
+	go mod tidy
 	cd ./test/integration; \
  	gotestsum -- -coverpkg="${COVER_PKGS}" -coverprofile=hack/tmp/integration-test-coverage.out ./... -timeout 5m -parallel 1
 
