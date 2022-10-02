@@ -127,11 +127,11 @@ func New(configuration options.Configuration) (controllerruntime.Manager, error)
 	controllerContext.Start()
 
 	// Trigger http server
-	if true {
+	if configuration.TriggerSync {
 		httpRouter := HttpRouter{compositeReconciler, decoratorReconciler, sync.Mutex{}, false}
 
 		go func(httpRouter *HttpRouter) {
-			port := ":8090"
+			port := ":" + configuration.TriggerSyncPort
 			logging.Logger.Info("Api server starting.", "port", port)
 
 			r := gin.Default()
