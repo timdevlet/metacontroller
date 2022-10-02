@@ -19,7 +19,9 @@ package server
 import (
 	"context"
 	"fmt"
+	"github.com/gin-gonic/gin"
 	"metacontroller/pkg/logging"
+	"net/http"
 	"time"
 
 	"k8s.io/client-go/discovery"
@@ -123,7 +125,24 @@ func New(configuration options.Configuration) (controllerruntime.Manager, error)
 	// to make sure all the needed informers are already created
 	controllerContext.Start()
 
+	go func() {
+		startGin()
+	}()
+
 	return mgr, nil
+}
+
+func startGin() {
+	r := gin.Default()
+	r.GET("/ping", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"message": "pong",
+		})
+	})
+	err := r.Run()
+	if err != nil {
+		return
+	}
 }
 
 func k8sCommunicationCheck(client *discovery.DiscoveryClient) (err error) {
